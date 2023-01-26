@@ -1,17 +1,76 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Theme;
+import 'package:vector_map_tiles/vector_map_tiles.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:vector_tile_renderer/vector_tile_renderer.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final MapController _controller = MapController();
+  VectorTileProvider _cachingTileProvider(String urlTemplate) {
+    return MemoryCacheVectorTileProvider(
+        delegate: NetworkVectorTileProvider(
+            urlTemplate: urlTemplate,
+            // this is the maximum zoom of the provider, not the
+            // maximum of the map. vector tiles are rendered
+            // to larger sizes to support higher zoom levels
+            maximumZoom: 14),
+        maxSizeBytes: 1024 * 1024 * 2);
+  }
+
+  String _urlTemplate() {
+    // IMPORTANT: See readme about matching tile provider with theme
+
+    // Stadia Maps source https://docs.stadiamaps.com/vector/
+    // ignore: undefined_identifier
+    return 'http://124.41.237.68/import.border_linestring/{z}/{x}/{y}.pbf';
+
+    // Maptiler source
+    // return 'https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=$maptilerApiKey';
+
+    // Mapbox source https://docs.mapbox.com/api/maps/vector-tiles/#example-request-retrieve-vector-tiles
+    // return 'https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/{z}/{x}/{y}.mvt?access_token=$mapboxApiKey',
+  }
+
+  Theme _mapTheme() {
+    // maps are rendered using themes
+    // to provide a dark theme do something like this:
+    // if (MediaQuery.of(context).platformBrightness == Brightness.dark) return myDarkTheme();
+    return ProvidedThemes.lightTheme();
+    // return ThemeReader(logger: const Logger.console())
+    //     .read(myCustomStyle());
+  }
+
+  _backgroundTheme() {
+    return _mapTheme()
+        .copyWith(types: {ThemeLayerType.background, ThemeLayerType.fill});
+  }
+
+  Widget _statusText() => Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      child: StreamBuilder(
+          stream: _controller.mapEventStream,
+          builder: (context, snapshot) {
+            return Text(
+                'Zoom: ${_controller.zoom.toStringAsFixed(2)} Center: ${_controller.center.latitude.toStringAsFixed(4)},${_controller.center.longitude.toStringAsFixed(4)}');
+          }));
 
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Demo',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         // This is the theme of your application.
         //
@@ -24,92 +83,46 @@ class MyApp extends StatelessWidget {
         // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      home: Scaffold(
+          body: SafeArea(
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+          children: [
+            Flexible(
+              child: FlutterMap(
+                mapController: _controller,
+                options: MapOptions(
+                    center: LatLng(27.68793186325968, 85.303834300851),
+                    zoom: 10,
+                    maxZoom: 22,
+                    interactiveFlags: InteractiveFlag.drag |
+                        InteractiveFlag.flingAnimation |
+                        InteractiveFlag.pinchMove |
+                        InteractiveFlag.pinchZoom |
+                        InteractiveFlag.doubleTapZoom),
+                children: [
+                  VectorTileLayer(
+                    theme: _mapTheme(),
+                    backgroundTheme: _backgroundTheme(),
+                    tileProviders: TileProviders({
+                      'gallimaptiles': _cachingTileProvider(_urlTemplate())
+                    }),
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                          point: LatLng(27.68793186325968, 85.303834300851),
+                          builder: (_) => Icon(Icons.location_on))
+                    ],
+                  )
+                ],
+              ),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
+            Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [_statusText()])
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      )),
     );
   }
 }
